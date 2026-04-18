@@ -1,49 +1,87 @@
 package com.example.newsreader068
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.safeContentPadding
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
-import org.jetbrains.compose.resources.painterResource
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.CreationExtras
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import com.example.newsreader068.data.remote.HttpClientFactory
+import com.example.newsreader068.data.remote.NewsApi
+import com.example.newsreader068.data.repository.NewsRepository
+import com.example.newsreader068.ui.screens.NewsDetailScreen
+import com.example.newsreader068.ui.screens.NewsListScreen
+import com.example.newsreader068.viewmodel.NewsDetailViewModel
+import com.example.newsreader068.viewmodel.NewsListViewModel
+import kotlin.reflect.KClass
 
-import newsreader068.composeapp.generated.resources.Res
-import newsreader068.composeapp.generated.resources.compose_multiplatform
+object Routes {
+    const val NEWS_LIST = "news_list"
+    const val NEWS_DETAIL = "news_detail/{articleId}"
+    fun newsDetail(id: Int) = "news_detail/$id"
+}
 
 @Composable
-@Preview
 fun App() {
+    val repository = remember {
+        val httpClient = HttpClientFactory.create()
+        val newsApi = NewsApi(httpClient)
+        NewsRepository(newsApi)
+    }
+
     MaterialTheme {
-        var showContent by remember { mutableStateOf(false) }
-        Column(
-            modifier = Modifier
-                .background(MaterialTheme.colorScheme.primaryContainer)
-                .safeContentPadding()
-                .fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Button(onClick = { showContent = !showContent }) {
-                Text("Click me!")
+        val navController = rememberNavController()
+
+        NavHost(navController = navController, startDestination = Routes.NEWS_LIST) {
+
+            composable(route = Routes.NEWS_LIST) {
+                val viewModel: NewsListViewModel = viewModel(
+                    factory = newsListViewModelFactory(repository)
+                )
+                NewsListScreen(
+                    viewModel = viewModel,
+                    onArticleClick = { navController.navigate(Routes.newsDetail(it)) }
+                )
             }
-            AnimatedVisibility(showContent) {
-                val greeting = remember { Greeting().greet() }
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Image(painterResource(Res.drawable.compose_multiplatform), null)
-                    Text("Compose: $greeting")
-                }
+
+            composable(
+                route = Routes.NEWS_DETAIL,
+                arguments = listOf(navArgument("articleId") { type = NavType.IntType })
+            ) { backStackEntry ->
+                val articleId = backStackEntry.arguments?.getInt("articleId") ?: return@composable
+                val viewModel: NewsDetailViewModel = viewModel(
+                    factory = newsDetailViewModelFactory(repository)
+                )
+                NewsDetailScreen(
+                    articleId = articleId,
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() }
+                )
             }
+        }
+    }
+}
+
+private fun newsListViewModelFactory(repository: NewsRepository): ViewModelProvider.Factory {
+    return object : ViewModelProvider.Factory {
+        override fun <T : ViewModel> create(modelClass: KClass<T>, extras: CreationExtras): T {
+            @Suppress("UNCHECKED_CAST")
+            return NewsListViewModel(repository) as T
+        }
+    }
+}
+
+private fun newsDetailViewModelFactory(repository: NewsRepository): ViewModelProvider.Factory {
+    return object : ViewModelProvider.Factory {
+        override fun <T : ViewModel> create(modelClass: KClass<T>, extras: CreationExtras): T {
+            @Suppress("UNCHECKED_CAST")
+            return NewsDetailViewModel(repository) as T
         }
     }
 }
