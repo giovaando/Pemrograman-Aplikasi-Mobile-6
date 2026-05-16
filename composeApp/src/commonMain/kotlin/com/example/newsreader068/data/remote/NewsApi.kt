@@ -13,11 +13,13 @@ class NewsApi(private val client: HttpClient) {
     private val baseUrl = "https://jsonplaceholder.typicode.com"
 
     /**
-     * Mengambil daftar semua artikel (berita) dari endpoint /posts.
+     * Mengambil daftar artikel dengan dukungan paginasi.
+     * @param page Nomor halaman yang ingin diambil.
+     * @param limit Jumlah maksimal artikel per halaman.
      * @return List of [Article] hasil parsing JSON.
      */
-    suspend fun getArticles(): List<Article> =
-        client.get("$baseUrl/posts").body()
+    suspend fun getArticles(page: Int = 1, limit: Int = 10): List<Article> =
+        client.get("$baseUrl/posts?_page=$page&_limit=$limit").body()
 
     /**
      * Mengambil detail satu artikel berdasarkan ID dari endpoint /posts/{id}.

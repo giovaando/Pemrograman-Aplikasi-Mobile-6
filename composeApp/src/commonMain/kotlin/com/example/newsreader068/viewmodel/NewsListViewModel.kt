@@ -9,10 +9,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/**
- * ViewModel untuk mengatur UI state pada layar daftar berita (NewsListScreen).
- * Memisahkan state menjadi Loading, Success, dan Error untuk UI yang reaktif.
- */
 class NewsListViewModel(private val repository: NewsRepository) : ViewModel() {
 
     private val _uiState = MutableStateFlow<UiState<List<Article>>>(UiState.Loading)
@@ -21,32 +17,63 @@ class NewsListViewModel(private val repository: NewsRepository) : ViewModel() {
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
+    // Parameter Paginasi
+    private var currentPage = 1
+    private val limitPerPage = 10
+    private var isLastPage = false
+    private var isLoadingNextPage = false
+
     init { loadArticles() }
 
-    /**
-     * Memuat artikel saat aplikasi pertama kali dibuka.
-     * Memanfaatkan cache jika sudah ada untuk menghemat kuota dan mempercepat pemuatan.
-     */
     fun loadArticles() {
         viewModelScope.launch {
             _uiState.value = UiState.Loading
-            repository.getArticles(forceRefresh = false)
+            currentPage = 1
+            isLastPage = false
+            repository.getArticles(page = currentPage, limit = limitPerPage, forceRefresh = false)
                 .onSuccess { _uiState.value = UiState.Success(it) }
-                .onFailure { _uiState.value = UiState.Error(it.message ?: "Gagal memuat berita. Periksa koneksi Anda.") }
+                .onFailure { _uiState.value = UiState.Error(it.message ?: "Gagal memuat berita.") }
+        }
+    }
+
+    fun refresh() {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            currentPage = 1
+            isLastPage = false
+            repository.getArticles(page = currentPage, limit = limitPerPage, forceRefresh = true)
+                .onSuccess { _uiState.value = UiState.Success(it) }
+                .onFailure { _uiState.value = UiState.Error(it.message ?: "Gagal memperbarui berita.") }
+            _isRefreshing.value = false
         }
     }
 
     /**
-     * Memuat ulang artikel dengan memaksa pengambilan data terbaru dari jaringan.
-     * Fungsi ini dipicu saat pengguna melakukan gesture pull-to-refresh.
+     * Memuat halaman berikutnya saat pengguna men-scroll ke bawah (Infinite Scroll).
      */
-    fun refresh() {
+    fun loadNextPage() {
+        // Cegah spamming request jika sedang loading atau sudah di halaman terakhir
+        if (isLoadingNextPage || isLastPage) return
+
+        isLoadingNextPage = true
+        currentPage++
+
         viewModelScope.launch {
-            _isRefreshing.value = true
-            repository.getArticles(forceRefresh = true)
-                .onSuccess { _uiState.value = UiState.Success(it) }
-                .onFailure { _uiState.value = UiState.Error(it.message ?: "Gagal memperbarui berita. Periksa koneksi Anda.") }
-            _isRefreshing.value = false
+            repository.getArticles(page = currentPage, limit = limitPerPage, forceRefresh = false)
+                .onSuccess { data ->
+                    // Ambil jumlah item sebelumnya untuk mengecek apakah data baru bertambah
+                    val oldSize = (_uiState.value as? UiState.Success)?.data?.size ?: 0
+                    if (data.size == oldSize) {
+                        isLastPage = true // Tidak ada data baru dari API
+                    } else {
+                        _uiState.value = UiState.Success(data)
+                    }
+                    isLoadingNextPage = false
+                }
+                .onFailure {
+                    isLoadingNextPage = false
+                    // Tangani error secara diam-diam tanpa merusak UI yang sudah ada
+                }
         }
     }
 }
