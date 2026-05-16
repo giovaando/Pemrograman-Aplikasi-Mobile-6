@@ -219,7 +219,8 @@ fun NewsDetailScreen(articleId: Int, viewModel: NewsDetailViewModel, onBack: () 
             is UiState.Error -> ErrorScreen(
                 message = state.message,
                 onRetry = { viewModel.retry(articleId) },
-                modifier = Modifier.padding(paddingValues)
+                modifier = Modifier.padding(paddingValues),
+                onGoBack = onBack
             )
         }
     }
